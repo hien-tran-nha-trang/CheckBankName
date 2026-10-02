@@ -3,3 +3,4 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 *_ket_qua.xlsx
+*_bao_cao.xlsx
