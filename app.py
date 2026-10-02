@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from bank_checker import BankMatcher, LookupResult, VietQRLookup, load_banks, process, read_excel, to_excel_bytes
+from bank_checker import BankMatcher, LookupResult, make_lookup, load_banks, process, read_excel, to_excel_bytes
 from bank_checker.banks import unsupported_reason
 from bank_checker.processor import (
     ACCOUNT_HINTS,
@@ -39,9 +39,20 @@ matcher = BankMatcher(banks)
 
 with st.sidebar:
     st.header("Cấu hình API")
-    client_id = st.text_input("Client ID", value=secret("VIETQR_CLIENT_ID"))
-    api_key = st.text_input("API Key", value=secret("VIETQR_API_KEY"), type="password")
-    st.markdown("Đăng ký lấy key tại [my.vietqr.io](https://my.vietqr.io) / [casso.vn](https://casso.vn).")
+    providers = {"tracuubank": "TraCứuBank (100đ/lượt)", "vietqr": "VietQR (đã ngừng gói Free)"}
+    default_provider = secret("LOOKUP_PROVIDER") or "tracuubank"
+    provider = st.radio("Nguồn tra cứu", list(providers), format_func=providers.get,
+                        index=list(providers).index(default_provider) if default_provider in providers else 0)
+    if provider == "tracuubank":
+        client_id = "-"
+        api_key = st.text_input("API Key", value=secret("TRACUUBANK_API_KEY"), type="password")
+        st.markdown("Đăng ký tại [tracuubank.com/register](https://tracuubank.com/register) "
+                    "→ Thông tin cá nhân → tạo API key.")
+    else:
+        client_id = st.text_input("Client ID", value=secret("VIETQR_CLIENT_ID"))
+        api_key = st.text_input("API Key", value=secret("VIETQR_API_KEY"), type="password")
+        st.markdown("Đăng ký tại [my.vietqr.io](https://my.vietqr.io). "
+                    "Lưu ý: API tra cứu đã ngừng cho gói Free từ 20/08/2024.")
     dry_run = st.checkbox("Chỉ kiểm tra dữ liệu (không gọi API)", value=not (client_id and api_key))
     delay = st.slider("Thời gian nghỉ giữa 2 lần gọi (giây)", 0.0, 3.0, 0.5, 0.1)
     with st.expander(f"Danh sách {len(banks)} ngân hàng"):
@@ -63,9 +74,9 @@ with tab_single:
         if not account.isdigit() or not 6 <= len(account) <= 19:
             st.error("Số tài khoản chỉ gồm 6-19 chữ số.")
         elif not (client_id and api_key):
-            st.error("Vui lòng nhập Client ID và API Key ở thanh bên trái.")
+            st.error("Vui lòng nhập API Key ở thanh bên trái.")
         else:
-            res = VietQRLookup(client_id, api_key).lookup(bank.bin, account)
+            res = make_lookup(provider, banks, client_id=client_id, api_key=api_key).lookup(bank.bin, account)
             if res.ok:
                 st.success(f"**{res.account_name}**")
             else:
@@ -112,9 +123,9 @@ with tab_file:
                 wait = 0
             else:
                 if not (client_id and api_key):
-                    st.error("Vui lòng nhập Client ID và API Key.")
+                    st.error("Vui lòng nhập API Key ở thanh bên trái.")
                     st.stop()
-                lookup_fn = VietQRLookup(client_id, api_key).lookup
+                lookup_fn = make_lookup(provider, banks, client_id=client_id, api_key=api_key).lookup
                 wait = delay
             bar = st.progress(0.0, text="Đang xử lý...")
             result = process(

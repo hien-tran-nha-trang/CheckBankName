@@ -8,13 +8,14 @@ tra cứu **tên chủ tài khoản** qua API VietQR (Napas 247) và xuất file
 | Nguồn | Dùng để | Ghi chú |
 |---|---|---|
 | `GET https://api.vietqr.io/v2/banks` | Danh sách ~65 ngân hàng + mã BIN | Miễn phí, không cần key. Có bản lưu sẵn ở `data/banks.json` khi mất mạng |
-| `POST https://api.vietqr.io/v2/lookup` | Tra cứu tên theo `bin` + `accountNumber` | **Cần** `x-client-id` và `x-api-key` – đăng ký tại [my.vietqr.io](https://my.vietqr.io) / [casso.vn](https://casso.vn) |
+| `GET https://tracuubank.com/api/lookup` (**mặc định**) | Tra cứu tên theo `bank_code` + `bank_number` | Header `Authorization: Bearer <key>`. Đăng ký tại [tracuubank.com/register](https://tracuubank.com/register), **100đ / lượt** tra thành công |
+| `POST https://api.vietqr.io/v2/lookup` | Tra cứu tên theo `bin` + `accountNumber` | ⚠️ **Đã ngừng cho gói Free từ 20/08/2024** (lỗi `[47]`), VietQR chuyển sang [bankHub Pay Out](https://bankhub.dev/product/pay-out) cho doanh nghiệp |
 
 ## Cài đặt
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # điền VIETQR_CLIENT_ID và VIETQR_API_KEY
+cp .env.example .env   # điền TRACUUBANK_API_KEY (hoặc chọn LOOKUP_PROVIDER=vietqr + key VietQR)
 ```
 
 ## Cách 1 – Giao diện web
@@ -23,7 +24,7 @@ cp .env.example .env   # điền VIETQR_CLIENT_ID và VIETQR_API_KEY
 streamlit run app.py
 ```
 
-1. Nhập Client ID / API Key ở thanh bên trái (hoặc để trong `.env` / `.streamlit/secrets.toml`).
+1. Chọn nguồn tra cứu và nhập API Key ở thanh bên trái (hoặc để trong `.env` / `.streamlit/secrets.toml`).
 2. Tải file Excel lên → chọn cột *Số tài khoản*, *Ngân hàng*, và (tuỳ chọn) cột *Họ tên* để đối chiếu.
 3. Bấm **Bắt đầu kiểm tra** → tải file `*_ket_qua.xlsx`.
 

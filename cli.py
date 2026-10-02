@@ -10,7 +10,7 @@ import argparse
 import os
 import sys
 
-from bank_checker import BankMatcher, LookupResult, VietQRLookup, load_banks, process, read_excel, to_excel_bytes
+from bank_checker import BankMatcher, LookupResult, TracuuBankLookup, VietQRLookup, load_banks, process, read_excel, to_excel_bytes
 from bank_checker.processor import (
     ACCOUNT_HINTS,
     BANK_HINTS,
@@ -43,6 +43,8 @@ def main():
     p.add_argument("--header", default="Tên TK tra cứu", help="Tiêu đề cột kết quả thêm vào cuối")
     p.add_argument("--report", action="store_true", help="Xuất thêm file báo cáo chi tiết *_bao_cao.xlsx")
     p.add_argument("--delay", type=float, default=0.5, help="Giây nghỉ giữa 2 lần gọi API")
+    p.add_argument("--provider", choices=["tracuubank", "vietqr"], default=os.getenv("LOOKUP_PROVIDER", "tracuubank"),
+                   help="Nguồn tra cứu (mặc định tracuubank; API lookup của VietQR đã ngừng cho gói Free)")
     p.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra dữ liệu, không gọi API")
     a = p.parse_args()
 
@@ -56,18 +58,22 @@ def main():
         sys.exit(f"Không tự nhận diện được cột. Các cột hiện có: {cols}. Dùng --account-col / --bank-col.")
     print(f"Cột STK: {account_col} | Cột ngân hàng: {bank_col} | Cột tên đối chiếu: {', '.join(name_cols) or '-'}")
 
+    banks = load_banks()
     if a.dry_run:
         lookup_fn = lambda b, n: LookupResult(False, message="Dữ liệu hợp lệ (chưa gọi API)")  # noqa: E731
     else:
         try:
-            lookup_fn = VietQRLookup(os.getenv("VIETQR_CLIENT_ID", ""), os.getenv("VIETQR_API_KEY", "")).lookup
+            if a.provider == "tracuubank":
+                lookup_fn = TracuuBankLookup(os.getenv("TRACUUBANK_API_KEY", ""), banks).lookup
+            else:
+                lookup_fn = VietQRLookup(os.getenv("VIETQR_CLIENT_ID", ""), os.getenv("VIETQR_API_KEY", "")).lookup
         except ValueError as e:
             sys.exit(f"{e}. Tạo file .env theo mẫu .env.example hoặc dùng --dry-run.")
 
     def progress(i, n):
         print(f"\r{i}/{n}", end="", flush=True)
 
-    result = process(df, account_col, bank_col, lookup_fn, BankMatcher(load_banks()), name_col=name_cols,
+    result = process(df, account_col, bank_col, lookup_fn, BankMatcher(banks), name_col=name_cols,
                      delay=0 if a.dry_run else a.delay, progress=progress)
     base = a.input.rsplit(".", 1)[0]
     out = a.output or base + "_ket_qua.xlsx"

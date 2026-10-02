@@ -107,3 +107,33 @@ def test_write_to_workbook(tmp_path, matcher):
     assert ws["D2"].value == "NGUYEN VAN A" and ws["D2"].comment is None
     assert ws["D3"].value == "NGUYEN VAN A" and "KHÔNG khớp" in ws["D3"].comment.text
     assert ws["D4"].value is None and "Kho bạc" in ws["D4"].comment.text
+
+
+def test_tracuubank_lookup(monkeypatch):
+    from bank_checker import TracuuBankLookup, load_banks
+
+    sent = {}
+
+    class Resp:
+        status_code = 200
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    def fake_get(url, params, timeout):
+        sent.update(params)
+        if params["bank_number"] == "1":
+            return Resp({"status": "error", "message": "Không tìm thấy tài khoản"})
+        return Resp({"status": "success", "data": {"accountName": "NGUYEN VAN A ", "bankCode": "VCB"}})
+
+    lk = TracuuBankLookup("key", load_banks(online=False))
+    monkeypatch.setattr(lk.session, "get", fake_get)
+    assert lk.session.headers["Authorization"] == "Bearer key"
+    res = lk.lookup("970436", "0071000123456")
+    assert res.ok and res.account_name == "NGUYEN VAN A"
+    assert sent == {"bank_code": "VCB", "bank_number": "0071000123456"}
+    bad = lk.lookup("970422", "1")
+    assert not bad.ok and "Không tìm thấy" in bad.message and sent["bank_code"] == "MB"
