@@ -9,6 +9,21 @@ import requests
 LOOKUP_URL = "https://api.vietqr.io/v2/lookup"
 
 
+class FatalLookupError(Exception):
+    """Lỗi làm mọi lượt tra sau đều hỏng (hết số dư, sai key...) -> dừng cả lô."""
+
+
+# Thông báo lỗi cho thấy không nên gọi tiếp
+_FATAL_HINTS = ("so du khong du", "thieu token", "token khong hop le", "unauthorized", "invalid token",
+                "free plan", "api key", "client key")
+
+
+def _is_fatal(status_code: int, message: str) -> bool:
+    from .banks import normalize
+
+    return status_code in (401, 402, 403) or any(h in normalize(message) for h in _FATAL_HINTS)
+
+
 @dataclass
 class LookupResult:
     ok: bool
@@ -47,7 +62,10 @@ class VietQRLookup:
             name = (body.get("data") or {}).get("accountName") if isinstance(body.get("data"), dict) else None
             if str(body.get("code")) == "00" and name:
                 return LookupResult(True, account_name=name.strip(), message=body.get("desc", ""))
-            return LookupResult(False, message=f"[{body.get('code')}] {body.get('desc', 'Không tìm thấy')}")
+            msg = f"[{body.get('code')}] {body.get('desc', 'Không tìm thấy')}"
+            if _is_fatal(resp.status_code, msg) or str(body.get("code")) in ("401", "47"):
+                raise FatalLookupError(msg)
+            return LookupResult(False, message=msg)
         return LookupResult(False, message=last_error)
 
 
@@ -91,6 +109,8 @@ class TracuuBankLookup:
             if name and str(body.get("status", "success")).lower() in ("success", "ok", "true"):
                 return LookupResult(True, account_name=str(name).strip())
             msg = body.get("message") or body.get("msg") or body.get("error") or "Không tìm thấy"
+            if _is_fatal(resp.status_code, str(msg)):
+                raise FatalLookupError(str(msg))
             return LookupResult(False, message=f"[HTTP {resp.status_code}] {msg}")
         return LookupResult(False, message=last_error)
 

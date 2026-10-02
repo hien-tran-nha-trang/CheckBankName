@@ -9,7 +9,7 @@ from typing import Callable, Iterable
 import pandas as pd
 
 from .banks import BankMatcher, normalize, unsupported_reason
-from .lookup import LookupResult
+from .lookup import FatalLookupError, LookupResult
 
 ACCOUNT_HINTS = ["so tai khoan", "stk", "so tk", "tai khoan", "account", "acc no", "account number"]
 BANK_HINTS = ["ngan hang", "ten ngan hang", "bank", "nh"]
@@ -103,6 +103,7 @@ def process(
     for c in RESULT_COLUMNS:
         out[c] = ""
     cache: dict[tuple[str, str], LookupResult] = {}
+    fatal = ""
     total = len(out)
     for i, (idx, row) in enumerate(out.iterrows(), start=1):
         account = clean_account(row.get(account_col))
@@ -123,8 +124,15 @@ def process(
         else:
             key = (bank.bin, account)
             if key not in cache:
-                cache[key] = lookup_fn(bank.bin, account)
-                if delay:
+                if fatal:
+                    cache[key] = LookupResult(False, message=f"Chưa tra (đã dừng: {fatal})")
+                else:
+                    try:
+                        cache[key] = lookup_fn(bank.bin, account)
+                    except FatalLookupError as e:
+                        fatal = str(e)
+                        cache[key] = LookupResult(False, message=f"Chưa tra (đã dừng: {fatal})")
+                if delay and not fatal:
                     time.sleep(delay)
             res = cache[key]
             out.at[idx, COL_RESULT_NAME] = res.account_name
@@ -133,6 +141,7 @@ def process(
                 out.at[idx, COL_MATCH] = best_match(row, name_cols, res.account_name)
         if progress:
             progress(i, total)
+    out.attrs["fatal_error"] = fatal
     return out
 
 

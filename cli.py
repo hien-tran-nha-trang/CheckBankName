@@ -75,6 +75,8 @@ def main():
 
     result = process(df, account_col, bank_col, lookup_fn, BankMatcher(banks), name_col=name_cols,
                      delay=0 if a.dry_run else a.delay, progress=progress)
+    if result.attrs.get("fatal_error"):
+        print(f"\n⚠️  Đã dừng tra cứu: {result.attrs['fatal_error']}")
     base = a.input.rsplit(".", 1)[0]
     out = a.output or base + "_ket_qua.xlsx"
     with open(out, "wb") as f:

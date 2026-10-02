@@ -137,3 +137,19 @@ def test_tracuubank_lookup(monkeypatch):
     assert sent == {"bank_code": "VCB", "bank_number": "0071000123456"}
     bad = lk.lookup("970422", "1")
     assert not bad.ok and "Không tìm thấy" in bad.message and sent["bank_code"] == "MB"
+
+
+def test_fatal_error_stops_batch(matcher):
+    from bank_checker.lookup import FatalLookupError
+
+    calls = []
+
+    def broke(b, a):
+        calls.append(a)
+        raise FatalLookupError("Số dư không đủ")
+
+    df = pd.DataFrame({"STK": ["11111111", "22222222", "33333333"], "NH": ["VCB"] * 3})
+    out = process(df, "STK", "NH", broke, matcher, delay=0)
+    assert calls == ["11111111"]
+    assert out.attrs["fatal_error"] == "Số dư không đủ"
+    assert all("Số dư không đủ" in s for s in out["Trạng thái"])

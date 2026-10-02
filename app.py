@@ -7,6 +7,7 @@ import streamlit as st
 
 from bank_checker import BankMatcher, LookupResult, make_lookup, load_banks, process, read_excel, to_excel_bytes
 from bank_checker.banks import unsupported_reason
+from bank_checker.lookup import FatalLookupError
 from bank_checker.processor import (
     ACCOUNT_HINTS,
     BANK_HINTS,
@@ -76,7 +77,10 @@ with tab_single:
         elif not (client_id and api_key):
             st.error("Vui lòng nhập API Key ở thanh bên trái.")
         else:
-            res = make_lookup(provider, banks, client_id=client_id, api_key=api_key).lookup(bank.bin, account)
+            try:
+                res = make_lookup(provider, banks, client_id=client_id, api_key=api_key).lookup(bank.bin, account)
+            except FatalLookupError as e:
+                res = LookupResult(False, message=str(e))
             if res.ok:
                 st.success(f"**{res.account_name}**")
             else:
@@ -133,6 +137,8 @@ with tab_file:
                 progress=lambda i, n: bar.progress(i / n, text=f"Đang xử lý {i}/{n}"),
             )
             bar.empty()
+            if result.attrs.get("fatal_error"):
+                st.error(f"Đã dừng tra cứu: {result.attrs['fatal_error']}")
             original = None
             if not up.name.lower().endswith((".csv", ".xls")):
                 original = write_to_workbook(io.BytesIO(up.getvalue()), result, sheet_name=sheet)
