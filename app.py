@@ -1,17 +1,20 @@
 """Giao diện web: streamlit run app.py"""
+import io
 import os
 
 import pandas as pd
 import streamlit as st
 
 from bank_checker import BankMatcher, LookupResult, VietQRLookup, load_banks, process, read_excel, to_excel_bytes
+from bank_checker.banks import unsupported_reason
 from bank_checker.processor import (
     ACCOUNT_HINTS,
     BANK_HINTS,
     COL_STATUS,
-    NAME_HINTS,
     clean_account,
     guess_column,
+    guess_name_columns,
+    write_to_workbook,
 )
 
 st.set_page_config(page_title="Kiểm tra tên tài khoản ngân hàng", page_icon="🏦", layout="wide")
@@ -86,19 +89,19 @@ with tab_file:
         def idx(col):
             return cols.index(col) if col in cols else 0
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         account_col = c1.selectbox("Cột số tài khoản", cols, index=idx(guess_column(cols, ACCOUNT_HINTS)))
         bank_col = c2.selectbox("Cột tên ngân hàng", cols, index=idx(guess_column(cols, BANK_HINTS)))
-        name_options = ["(không so khớp)"] + cols
-        guessed_name = guess_column([c for c in cols if c not in (account_col, bank_col)], NAME_HINTS)
-        name_col = c3.selectbox(
-            "Cột tên cần đối chiếu (tuỳ chọn)",
-            name_options,
-            index=name_options.index(guessed_name) if guessed_name else 0,
+        name_cols = st.multiselect(
+            "Cột tên dùng để đối chiếu (tuỳ chọn – tên tra cứu khớp với cột nào cũng được)",
+            [c for c in cols if c not in (account_col, bank_col)],
+            default=guess_name_columns(cols, exclude=(account_col, bank_col)),
         )
-        name_col = None if name_col == "(không so khớp)" else name_col
 
-        unknown = sorted({str(v) for v in df[bank_col].dropna() if matcher.match(v) is None})
+        unknown = sorted({
+            str(v) for v in df[bank_col].dropna()
+            if matcher.match(v) is None and not unsupported_reason(v)
+        })
         if unknown:
             st.warning("Không nhận diện được các ngân hàng sau, hãy sửa trong file: " + ", ".join(unknown))
 
@@ -115,16 +118,27 @@ with tab_file:
                 wait = delay
             bar = st.progress(0.0, text="Đang xử lý...")
             result = process(
-                df, account_col, bank_col, lookup_fn, matcher, name_col=name_col, delay=wait,
+                df, account_col, bank_col, lookup_fn, matcher, name_col=name_cols, delay=wait,
                 progress=lambda i, n: bar.progress(i / n, text=f"Đang xử lý {i}/{n}"),
             )
             bar.empty()
+            original = None
+            if not up.name.lower().endswith((".csv", ".xls")):
+                original = write_to_workbook(io.BytesIO(up.getvalue()), result, sheet_name=sheet)
+            # Lưu lại để bấm tải file không phải tra cứu lại
+            st.session_state["result"] = (up.name, result, original)
+
+        saved = st.session_state.get("result")
+        if saved and saved[0] == up.name:
+            _, result, original = saved
             ok = (result[COL_STATUS] == "OK").sum()
             st.success(f"Hoàn tất: {ok}/{len(result)} tài khoản tra cứu thành công.")
             st.dataframe(result, hide_index=True)
-            st.download_button(
-                "⬇️ Tải file kết quả",
-                data=to_excel_bytes(result),
-                file_name=up.name.rsplit(".", 1)[0] + "_ket_qua.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+            base = up.name.rsplit(".", 1)[0]
+            xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            d1, d2 = st.columns(2)
+            if original is not None:
+                d1.download_button("⬇️ File gốc + cột tên tra cứu", data=original,
+                                   file_name=f"{base}_ket_qua.xlsx", mime=xlsx, type="primary")
+            d2.download_button("⬇️ Báo cáo chi tiết", data=to_excel_bytes(result),
+                               file_name=f"{base}_bao_cao.xlsx", mime=xlsx)

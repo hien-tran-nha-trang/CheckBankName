@@ -33,11 +33,28 @@ Tab **Tra cứu 1 tài khoản** để kiểm tra nhanh từng số.
 
 ```bash
 python cli.py data/mau_danh_sach.xlsx              # tự đoán cột
-python cli.py ds.xlsx --account-col STK --bank-col "Ngân hàng" --name-col "Họ tên"
+python cli.py Kiem_tra_TNKH.xlsx --report       # file gốc + cột K, kèm báo cáo chi tiết
+python cli.py ds.xlsx --account-col "Số TK Ngân Hàng" --bank-col "Tên Ngân Hàng" --name-col "Tên KH"
 python cli.py ds.xlsx --dry-run                    # chỉ kiểm tra dữ liệu, không gọi API
 ```
 
 ## File kết quả
+
+App xuất 2 file:
+
+### 1. `*_ket_qua.xlsx` – file gốc + 1 cột cuối "Tên TK tra cứu"
+
+Giữ nguyên định dạng file import của bạn, chỉ thêm **1 cột ở cuối** (vd file mẫu A–J → cột **K**):
+
+- Tra được tên → ghi tên chủ tài khoản.
+  Nếu tên **không khớp** với các cột *Tên KH / Tên Đơn Vị / Tên Liên Hệ* → ô tô **vàng**, rê chuột xem chú thích.
+- Không tra được → ô để trống, tô **đỏ**, lý do nằm trong chú thích (comment) của ô.
+
+Tên ngân hàng dạng `Ngân Hàng TMCP Á Châu_CN Khánh Hòa_PGD Cam Ranh`, `... - Chi nhánh Phú Yên`
+được tự cắt phần chi nhánh/PGD trước khi nhận diện. Dòng **Kho Bạc Nhà Nước** được báo
+"không hỗ trợ" vì Kho bạc không thuộc hệ thống Napas 247.
+
+### 2. `*_bao_cao.xlsx` – báo cáo chi tiết
 
 Giữ nguyên các cột gốc và thêm:
 
@@ -48,7 +65,8 @@ Giữ nguyên các cột gốc và thêm:
 
 ## Lưu ý
 
-- Cột số tài khoản trong Excel nên để định dạng **Text** để không mất số 0 đầu.
+- Cột số tài khoản trong Excel nên để định dạng **Text** để không mất số 0 đầu. STK dài hơn 15 chữ số
+  từng bị lưu dạng số sẽ bị Excel làm tròn (vd `37140111367700000`) – nên kiểm tra lại các dòng này.
 - Tên ngân hàng có thể ghi tự do: `VCB`, `Vietcombank`, `NH TMCP Ngoại thương`, `970436`,
   `Vietinbank - CN Nha Trang`… Dòng không nhận diện được sẽ được báo trên giao diện.
 - Một số ngân hàng (Timo, Citibank, KEB Hana, …) VietQR chưa hỗ trợ tra cứu.

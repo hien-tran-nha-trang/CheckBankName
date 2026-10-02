@@ -24,7 +24,7 @@ EXTRA_ALIASES = {
     "VPB": ["vp", "viet nam thinh vuong"],
     "STB": ["sacom", "sai gon thuong tin"],
     "TPB": ["tp", "tien phong"],
-    "HDB": ["hd"],
+    "HDB": ["hd", "phat trien nha thanh pho ho chi minh", "phat trien nha tp hcm", "phat trien nha"],
     "EIB": ["exim", "xuat nhap khau"],
     "MSB": ["maritime", "hang hai"],
     "VCCB": ["ban viet", "viet capital", "bvbank"],
@@ -110,6 +110,28 @@ def load_banks(online: bool = True, timeout: float = 10) -> list[Bank]:
     ]
 
 
+# Phần chi nhánh/PGD phía sau tên ngân hàng: "..._CN Khánh Hòa_PGD Cam Ranh", "... - Chi nhánh Phú Yên"
+_BRANCH_SPLIT = re.compile(r"\s*\b(?:cn|chi nhanh|pgd|phong giao dich)\b")
+
+# Đơn vị không thuộc hệ thống Napas 247 -> không thể tra cứu tên
+NOT_SUPPORTED = {"kho bac": "Kho bạc Nhà nước không hỗ trợ tra cứu tên qua Napas"}
+
+
+def strip_branch(text: str) -> str:
+    """'Ngân Hàng TMCP Á Châu_CN Sài Gòn' -> 'ngan hang tmcp a chau'."""
+    first = str(text or "").split("_", 1)[0]
+    head = _BRANCH_SPLIT.split(normalize(first), maxsplit=1)[0].strip()
+    return head or normalize(text)
+
+
+def unsupported_reason(text: str) -> str | None:
+    norm = normalize(text)
+    for key, reason in NOT_SUPPORTED.items():
+        if norm.startswith(key) or f" {key} " in f" {norm} ":
+            return reason
+    return None
+
+
 class BankMatcher:
     """Đoán ngân hàng từ chuỗi người dùng nhập (VCB, Vietcombank, NH Ngoại thương, 970436...)."""
 
@@ -124,11 +146,17 @@ class BankMatcher:
                         self._exact.setdefault(variant, b)
 
     def match(self, text: str) -> Bank | None:
-        if text is None:
+        if text is None or not normalize(text):
             return None
+        head = strip_branch(text)
+        if head != normalize(text):
+            found = self._match(head)
+            if found:
+                return found
+        return self._match(text)
+
+    def _match(self, text: str) -> Bank | None:
         norm = normalize(text)
-        if not norm:
-            return None
         for variant in (norm, _core(text), norm.replace(" ", ""), _core(text).replace(" ", "")):
             if variant and variant in self._exact:
                 return self._exact[variant]
